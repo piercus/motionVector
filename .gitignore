@@ -1,0 +1,6 @@
+tmp
+build
+*.mp4
+*.m4v
+node_modules
+*.csv
