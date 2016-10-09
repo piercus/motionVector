@@ -21,12 +21,16 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include <node.h>
+#include <v8.h>
+
+extern "C" {
 
 #include <libavutil/motion_vector.h>
 #include <libavformat/avformat.h>
 
-#include <node.h>
-#include <v8.h>
+}
+using namespace std;
 
 static AVFormatContext *fmt_ctx = NULL;
 static AVCodecContext *video_dec_ctx = NULL;
@@ -112,17 +116,14 @@ static int open_codec_context(int *stream_idx,
     return 0;
 }
 
-int main(int argc, char **argv)
+int c_function(const char* src_filename_in)
 {
     int ret = 0, got_frame;
 
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <video>\n", argv[0]);
-        exit(1);
-    }
-    src_filename = argv[1];
-
     av_register_all();
+
+    src_filename =  src_filename_in;
+
 
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
         fprintf(stderr, "Could not open source file %s\n", src_filename);
@@ -188,28 +189,13 @@ end:
     return ret < 0;
 }
 
-int c_function()
-{
-    return 2;
-}
 
 
 void GetVectors(const v8::FunctionCallbackInfo<v8::Value>& args) {
   v8::Isolate* isolate = args.GetIsolate();
   v8::HandleScope scope(isolate);
 
-  static AVFormatContext *fmt_ctx = NULL;
-  static AVCodecContext *video_dec_ctx = NULL;
-  static AVStream *video_stream = NULL;
-  static const char *src_filename = NULL;
-
-  static int video_stream_idx = -1;
-  static AVFrame *frame = NULL;
-  static AVPacket pkt;
-  static int video_frame_count = 0;
-
-
-  args.GetReturnValue().Set(c_function());
+  args.GetReturnValue().Set(c_function("/home/pierre/dev/motionVector/input.m4v"));
 }
 
 void init(v8::Local<v8::Object> target) {
