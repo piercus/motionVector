@@ -24,6 +24,7 @@
 #include <node.h>
 #include <v8.h>
 #include <iostream>
+#include <nan.h>
 
 extern "C" {
 
@@ -37,6 +38,8 @@ namespace jsscope {
   using v8::FunctionCallbackInfo;
   using v8::Isolate;
   using v8::Local;
+  using v8::Array;
+  using v8::Handle;
   using v8::Null;
   using v8::Object;
   using v8::String;
@@ -75,30 +78,49 @@ namespace jsscope {
               sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MOTION_VECTORS);
               if (sd) {
                   const AVMotionVector *mvs = (const AVMotionVector *)sd->data;
-                  for (i = 0; i < sd->size / sizeof(*mvs); i++) {
+                  int size = sd->size / sizeof(*mvs);
+                  Handle<Array> array = Array::New(isolate, size);
+
+                  for (i = 0; i < size; i++) {
                       const AVMotionVector *mv = &mvs[i];
 
                       // "framenum,source,blockw,blockh,srcx,srcy,dstx,dsty,flags\n"
 
-                      const unsigned argc = 1;
-                      Local<Object> obj = Object::New(isolate);
-                      obj->Set(String::NewFromUtf8(isolate, "framenum"), Number::New(isolate, video_frame_count));
-                      obj->Set(String::NewFromUtf8(isolate, "source"),  Number::New(isolate,  mv->source));
-                      obj->Set(String::NewFromUtf8(isolate, "w"),  Number::New(isolate, mv->w));
-                      obj->Set(String::NewFromUtf8(isolate, "h"),  Number::New(isolate, mv->h));
-                      obj->Set(String::NewFromUtf8(isolate, "srcx"),  Number::New(isolate, mv->src_x));
-                      obj->Set(String::NewFromUtf8(isolate, "srcy"),  Number::New(isolate, mv->src_y));
-                      obj->Set(String::NewFromUtf8(isolate, "dstx"),  Number::New(isolate, mv->dst_x));
-                      obj->Set(String::NewFromUtf8(isolate, "dsty"),  Number::New(isolate, mv->dst_y));
-                      obj->Set(String::NewFromUtf8(isolate, "flags"),  Number::New(isolate, mv->flags));
+                      Local<Object> objItem = Object::New(isolate);
 
-                      Local<Value> argv[argc] = { obj };
-                      cb->Call(Null(isolate), argc, argv);
-                      /*printf("%d,%2d,%2d,%2d,%4d,%4d,%4d,%4d,0x%"PRIx64"\n",
+                      objItem->Set(String::NewFromUtf8(isolate, "w"),  Number::New(isolate, mv->w));
+                      objItem->Set(String::NewFromUtf8(isolate, "h"),  Number::New(isolate, mv->h));
+                      objItem->Set(String::NewFromUtf8(isolate, "srcx"),  Number::New(isolate, mv->src_x));
+                      objItem->Set(String::NewFromUtf8(isolate, "srcy"),  Number::New(isolate, mv->src_y));
+                      objItem->Set(String::NewFromUtf8(isolate, "dstx"),  Number::New(isolate, mv->dst_x));
+                      objItem->Set(String::NewFromUtf8(isolate, "dsty"),  Number::New(isolate, mv->dst_y));
+                      objItem->Set(String::NewFromUtf8(isolate, "flags"),  Number::New(isolate, mv->flags));
+
+                      array->Set(i, objItem);
+
+                      printf("%d,%2d,%2d,%2d,%4d,%4d,%4d,%4d,0x%"PRIx64"\n",
                              video_frame_count, mv->source,
                              mv->w, mv->h, mv->src_x, mv->src_y,
                              mv->dst_x, mv->dst_y, mv->flags);*/
                   }
+
+                  Local<Object> obj = Object::New(isolate);
+
+                  obj->Set(String::NewFromUtf8(isolate, "framenum"), Number::New(isolate, video_frame_count));
+                  obj->Set(String::NewFromUtf8(isolate, "vectors"), array);
+                  const unsigned argc = 1;
+
+                  Local<Value> argv[argc] = { obj };
+
+                  cb->Call(Null(isolate), argc, argv);
+              } else {
+                Local<Object> obj = Object::New(isolate);
+                obj->Set(String::NewFromUtf8(isolate, "framenum"), Number::New(isolate, video_frame_count));
+
+                const unsigned argc = 1;
+
+                Local<Value> argv[argc] = { obj };
+                cb->Call(Null(isolate), argc, argv);
               }
           }
       }
@@ -228,19 +250,24 @@ namespace jsscope {
 
 
 
-  void GetVectors(const FunctionCallbackInfo<Value>& args) {
+  void GetVectors(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     //Isolate* isolate = args.GetIsolate();
     //HandleScope scope(isolate);
 
-    Isolate* isolate = args.GetIsolate();
-    Local<Function> cb = Local<Function>::Cast(args[1]);
-    Local<String> filename = Local<String>::Cast(args[0]);
+    Isolate* isolate = info.GetIsolate();
+    Local<Function> cb = info[1].As<v8::Function>();
+    Local<String> str = info[0]->ToString();
+    //Local<String> filename = Local<String>::Cast(args[0]);
+    //NanSymbol(args[0])
+    //Handle<Value> filename = String::New( args[0].c_str() );
 
-    args.GetReturnValue().Set(c_function(filename, cb, isolate));
+    info.GetReturnValue().Set(c_function(str, cb, isolate));
   }
 
   void Init(Local<Object> exports, Local<Object> module) {
-    NODE_SET_METHOD(module, "exports", GetVectors);
+    //NODE_SET_METHOD(module, "exports", GetVectors);
+    exports->Set(Nan::New("getVector").ToLocalChecked(),
+                   Nan::New<v8::FunctionTemplate>(GetVectors)->GetFunction());
   }
 
   NODE_MODULE(binding, Init);

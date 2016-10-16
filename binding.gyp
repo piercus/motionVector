@@ -7,7 +7,10 @@
         "libraries": [
             "-lavformat-ffmpeg"
         ],
-      }
+      },
+      "include_dirs" : [
+        "<!(node -e \"require('nan')\")"
+      ]
     }
   ]
 }

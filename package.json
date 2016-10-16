@@ -10,6 +10,7 @@
   "author": "Pierre Colle",
   "license": "MIT",
   "dependencies": {
+    "nan": "^2.4.0",
     "v8plus": "^0.3.1"
   }
 }
