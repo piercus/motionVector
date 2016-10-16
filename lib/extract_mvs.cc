@@ -98,10 +98,10 @@ namespace jsscope {
 
                       array->Set(i, objItem);
 
-                      printf("%d,%2d,%2d,%2d,%4d,%4d,%4d,%4d,0x%"PRIx64"\n",
-                             video_frame_count, mv->source,
-                             mv->w, mv->h, mv->src_x, mv->src_y,
-                             mv->dst_x, mv->dst_y, mv->flags);*/
+                      //printf("%d,%2d,%2d,%2d,%4d,%4d,%4d,%4d,0x%"PRIx64"\n",
+                      //       video_frame_count, mv->source,
+                      //       mv->w, mv->h, mv->src_x, mv->src_y,
+                      //       mv->dst_x, mv->dst_y, mv->flags);
                   }
 
                   Local<Object> obj = Object::New(isolate);
