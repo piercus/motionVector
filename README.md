@@ -5,6 +5,7 @@
 ## Installation
 
 ```
+sudo apt-get install libavutil-dev
 npm install motion-vector
 ```
 ## Dependencies

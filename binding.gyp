@@ -5,7 +5,6 @@
       "sources": [ "lib/extract_mvs.cc" ],
       "link_settings": {
         "libraries": [
-            "-lavformat-ffmpeg"
         ],
       },
       "include_dirs" : [
