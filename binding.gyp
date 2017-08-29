@@ -5,6 +5,7 @@
       "sources": [ "lib/extract_mvs.cc" ],
       "link_settings": {
         "libraries": [
+            "-lavformat"
         ],
       },
       "include_dirs" : [

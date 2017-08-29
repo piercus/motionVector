@@ -25,6 +25,7 @@
 #include <v8.h>
 #include <iostream>
 #include <nan.h>
+#include <map>
 
 extern "C" {
 
@@ -56,8 +57,10 @@ namespace jsscope {
   static AVFrame *frame = NULL;
   static AVPacket pkt;
   static int video_frame_count = 0;
+  typedef std::map<unsigned int, bool> FramesHash;
 
-  static int decode_packet(int *got_frame, int cached, v8::Local<v8::Function> cb, Isolate* isolate)
+
+  static int decode_packet(int *got_frame, FramesHash selectedFrames, int cached, v8::Local<v8::Function> cb, Isolate* isolate)
   {
       int decoded = pkt.size;
 
@@ -75,52 +78,56 @@ namespace jsscope {
               AVFrameSideData *sd;
 
               video_frame_count++;
-              sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MOTION_VECTORS);
-              if (sd) {
-                  const AVMotionVector *mvs = (const AVMotionVector *)sd->data;
-                  int size = sd->size / sizeof(*mvs);
-                  Handle<Array> array = Array::New(isolate, size);
+              //fprintf(stderr, "Frame number %i %s\n", video_frame_count, selectedFrames[video_frame_count] ? "true" : "false");
 
-                  for (i = 0; i < size; i++) {
-                      const AVMotionVector *mv = &mvs[i];
+              if(selectedFrames[video_frame_count]){
+                sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MOTION_VECTORS);
+                if (sd) {
+                    const AVMotionVector *mvs = (const AVMotionVector *)sd->data;
+                    int size = sd->size / sizeof(*mvs);
+                    Handle<Array> array = Array::New(isolate, size);
 
-                      // "framenum,source,blockw,blockh,srcx,srcy,dstx,dsty,flags\n"
+                    for (i = 0; i < size; i++) {
+                        const AVMotionVector *mv = &mvs[i];
 
-                      Local<Object> objItem = Object::New(isolate);
+                        // "framenum,source,blockw,blockh,srcx,srcy,dstx,dsty,flags\n"
 
-                      objItem->Set(String::NewFromUtf8(isolate, "w"),  Number::New(isolate, mv->w));
-                      objItem->Set(String::NewFromUtf8(isolate, "h"),  Number::New(isolate, mv->h));
-                      objItem->Set(String::NewFromUtf8(isolate, "srcx"),  Number::New(isolate, mv->src_x));
-                      objItem->Set(String::NewFromUtf8(isolate, "srcy"),  Number::New(isolate, mv->src_y));
-                      objItem->Set(String::NewFromUtf8(isolate, "dstx"),  Number::New(isolate, mv->dst_x));
-                      objItem->Set(String::NewFromUtf8(isolate, "dsty"),  Number::New(isolate, mv->dst_y));
-                      objItem->Set(String::NewFromUtf8(isolate, "flags"),  Number::New(isolate, mv->flags));
+                        Local<Object> objItem = Object::New(isolate);
 
-                      array->Set(i, objItem);
+                        objItem->Set(String::NewFromUtf8(isolate, "w"),  Number::New(isolate, mv->w));
+                        objItem->Set(String::NewFromUtf8(isolate, "h"),  Number::New(isolate, mv->h));
+                        objItem->Set(String::NewFromUtf8(isolate, "srcx"),  Number::New(isolate, mv->src_x));
+                        objItem->Set(String::NewFromUtf8(isolate, "srcy"),  Number::New(isolate, mv->src_y));
+                        objItem->Set(String::NewFromUtf8(isolate, "dstx"),  Number::New(isolate, mv->dst_x));
+                        objItem->Set(String::NewFromUtf8(isolate, "dsty"),  Number::New(isolate, mv->dst_y));
+                        objItem->Set(String::NewFromUtf8(isolate, "flags"),  Number::New(isolate, mv->flags));
 
-                      //printf("%d,%2d,%2d,%2d,%4d,%4d,%4d,%4d,0x%"PRIx64"\n",
-                      //       video_frame_count, mv->source,
-                      //       mv->w, mv->h, mv->src_x, mv->src_y,
-                      //       mv->dst_x, mv->dst_y, mv->flags);
-                  }
+                        array->Set(i, objItem);
 
+                        //printf("%d,%2d,%2d,%2d,%4d,%4d,%4d,%4d,0x%"PRIx64"\n",
+                        //       video_frame_count, mv->source,
+                        //       mv->w, mv->h, mv->src_x, mv->src_y,
+                        //       mv->dst_x, mv->dst_y, mv->flags);
+                    }
+
+                    Local<Object> obj = Object::New(isolate);
+
+                    obj->Set(String::NewFromUtf8(isolate, "framenum"), Number::New(isolate, video_frame_count));
+                    obj->Set(String::NewFromUtf8(isolate, "vectors"), array);
+                    const unsigned argc = 1;
+
+                    Local<Value> argv[argc] = { obj };
+
+                    cb->Call(Null(isolate), argc, argv);
+                } else {
                   Local<Object> obj = Object::New(isolate);
-
                   obj->Set(String::NewFromUtf8(isolate, "framenum"), Number::New(isolate, video_frame_count));
-                  obj->Set(String::NewFromUtf8(isolate, "vectors"), array);
+
                   const unsigned argc = 1;
 
                   Local<Value> argv[argc] = { obj };
-
                   cb->Call(Null(isolate), argc, argv);
-              } else {
-                Local<Object> obj = Object::New(isolate);
-                obj->Set(String::NewFromUtf8(isolate, "framenum"), Number::New(isolate, video_frame_count));
-
-                const unsigned argc = 1;
-
-                Local<Value> argv[argc] = { obj };
-                cb->Call(Null(isolate), argc, argv);
+                }
               }
           }
       }
@@ -167,18 +174,20 @@ namespace jsscope {
       return 0;
   }
 
-  int c_function(v8::Local<v8::String> src_filename_in, v8::Local<v8::Function> cb, Isolate* isolate)
+  int c_function(v8::Local<v8::String> src_filename_in, FramesHash selectedFrames, v8::Local<v8::Function> cb, Isolate* isolate)
   {
       int ret = 0, got_frame;
 
       av_register_all();
 
       v8::String::Utf8Value filename2(src_filename_in->ToString());
-      src_filename = std::string(*filename2).c_str();
+      std::string str(*filename2);
+      char * cstr = new char [str.length()+1];
+      std::strcpy (src_filename, str.c_str());
 
-
-      if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
-          fprintf(stderr, "Could not open source file %s\n", src_filename);
+      if (avformat_open_input(&fmt_ctx, cstr, NULL, NULL) < 0) {
+          fprintf(stderr, "filename is %s\n", cstr);
+          fprintf(stderr, "Could not open source file : %s\n", cstr);
           exit(1);
       }
 
@@ -224,7 +233,7 @@ namespace jsscope {
       while (av_read_frame(fmt_ctx, &pkt) >= 0) {
           AVPacket orig_pkt = pkt;
           do {
-              ret = decode_packet(&got_frame, 0, cb, isolate);
+              ret = decode_packet(&got_frame, selectedFrames, 0, cb, isolate);
               if (ret < 0)
                   break;
               pkt.data += ret;
@@ -237,7 +246,7 @@ namespace jsscope {
       pkt.data = NULL;
       pkt.size = 0;
       do {
-          decode_packet(&got_frame, 1, cb, isolate);
+          decode_packet(&got_frame, selectedFrames, 1, cb, isolate);
       } while (got_frame);
 
   //end:
@@ -255,13 +264,28 @@ namespace jsscope {
     //HandleScope scope(isolate);
 
     Isolate* isolate = info.GetIsolate();
-    Local<Function> cb = info[1].As<v8::Function>();
+    Local<Function> cb = info[2].As<v8::Function>();
     Local<String> str = info[0]->ToString();
+
+    info[1]->ToObject();
+
+    Local<Array> frames = Local<Array>::Cast(info[1]);
+
+    unsigned int n = frames->Length();
+
+    FramesHash selectedFrames;
+
+    for (unsigned int i = 0; i < n; i++) {
+      int frame = frames->Get(i)->IntegerValue();
+      selectedFrames.insert(std::make_pair(frame, true));
+    }
+
+
     //Local<String> filename = Local<String>::Cast(args[0]);
     //NanSymbol(args[0])
     //Handle<Value> filename = String::New( args[0].c_str() );
 
-    info.GetReturnValue().Set(c_function(str, cb, isolate));
+    info.GetReturnValue().Set(c_function(str, selectedFrames, cb, isolate));
   }
 
   void Init(Local<Object> exports, Local<Object> module) {
